@@ -1,0 +1,21 @@
+.{
+    .name = "sdl-zig-demo",
+    .version = "0.0.0",
+    .dependencies = .{
+        .sdl = .{
+            .url = "https://github.com/andrewrk/SDL/archive/c90c2d0a3b155ef8b4728ba9db80eae1a22d771e.tar.gz",
+            .hash = "12204b74bb1679d7d94a6da918a58cf0c5291c260dffc595a5f151a001f86763e0bf",
+        },
+        .sdlImage = .{
+            .url = "https://github.com/jakubpodgorniak/SDL_image/archive/5aaa4e218bea10261f54f1a2dea1dc52990bbe25.tar.gz",
+            .hash = "1220bc352594ae0c7651e33e8362b2f1dab0bce1f8e9a9fed99c6963a93f1e8bc81e",
+        },
+    },
+    .paths = .{
+        "LICENSE",
+        "README.md",
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
