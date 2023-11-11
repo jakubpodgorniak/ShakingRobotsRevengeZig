@@ -3,6 +3,7 @@ const c = @cImport({
     @cInclude("SDL2/SDL_image.h");
 });
 const assert = @import("std").debug.assert;
+const entities = @import("entities.zig");
 
 pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
@@ -58,6 +59,13 @@ pub fn main() !void {
     defer c.SDL_DestroyTexture(floorTexture);
     defer c.IMG_Quit();
 
+    const player: entities.Player = entities.Player{
+        .position = .{ 5.0, 2.8125 },
+        .immortal = false,
+    };
+
+    const dt: f32 = 17.0 / 1000.0;
+
     var quit = false;
     while (!quit) {
         var event: c.SDL_Event = undefined;
@@ -69,6 +77,8 @@ pub fn main() !void {
                 else => {},
             }
         }
+
+        player.update(dt);
 
         _ = c.SDL_RenderClear(renderer);
         _ = c.SDL_RenderCopy(renderer, floorTexture, null, null);
