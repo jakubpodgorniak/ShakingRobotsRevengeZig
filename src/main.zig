@@ -4,6 +4,7 @@ const c = @cImport({
 });
 const assert = @import("std").debug.assert;
 const entities = @import("entities.zig");
+const Vector2 = @import("core.zig").Vector2;
 
 pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
@@ -57,10 +58,16 @@ pub fn main() !void {
         return error.SDLInitializationFailed;
     };
     defer c.SDL_DestroyTexture(floorTexture);
+
+    const jasonTexture: *c.SDL_Texture = c.IMG_LoadTexture(renderer, "./resources/jason.png") orelse {
+        c.SDL_Log("Unable to load png: %s", c.SDL_GetError());
+        return error.SDLInitializationFailed;
+    };
+    defer c.SDL_DestroyTexture(jasonTexture);
     defer c.IMG_Quit();
 
-    const player: entities.Player = entities.Player{
-        .position = .{ 5.0, 2.8125 },
+    var player = entities.Player{
+        .position = Vector2.new(5.0, 2.8125),
         .immortal = false,
     };
 
@@ -74,6 +81,12 @@ pub fn main() !void {
                 c.SDL_QUIT => {
                     quit = true;
                 },
+                c.SDL_KEYDOWN => {
+                    player.position = player.position.add(Vector2.UNIT_X);
+                },
+                c.SDL_KEYUP => {
+                    player.position = player.position.add(Vector2.UNIT_Y);
+                },
                 else => {},
             }
         }
@@ -82,6 +95,14 @@ pub fn main() !void {
 
         _ = c.SDL_RenderClear(renderer);
         _ = c.SDL_RenderCopy(renderer, floorTexture, null, null);
+
+        const jasonDest: *const c.SDL_Rect = &.{
+            .x = @as(c_int, @intFromFloat(player.position.getX())),
+            .y = @as(c_int, @intFromFloat(player.position.getY())),
+            .w = 1280,
+            .h = 720,
+        };
+        _ = c.SDL_RenderCopy(renderer, jasonTexture, null, jasonDest);
         c.SDL_RenderPresent(renderer);
 
         c.SDL_Delay(17);
