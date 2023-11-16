@@ -2,9 +2,13 @@ const c = @cImport({
     @cInclude("SDL2/SDL.h");
     @cInclude("SDL2/SDL_image.h");
 });
+const std = @import("std");
 const assert = @import("std").debug.assert;
 const entities = @import("entities.zig");
 const Vector2 = @import("core.zig").Vector2;
+const InputFrame = @import("input.zig").InputFrame;
+const InputSnapshot = @import("input.zig").InputSnapshot;
+const Scancode = @import("input.zig").Scancode;
 
 pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
@@ -71,10 +75,23 @@ pub fn main() !void {
         .immortal = false,
     };
 
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpaAllocator = gpa.allocator();
+    defer {
+        const deinit_status = gpa.deinit();
+        if (deinit_status == .leak) unreachable;
+    }
+
+    var _inputFrame = InputFrame.init(gpaAllocator);
+    var inputFrame: *InputFrame = &_inputFrame;
+    defer inputFrame.deinit();
+
     const dt: f32 = 17.0 / 1000.0;
 
     var quit = false;
     while (!quit) {
+        try inputFrame.beginNext();
+
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
             switch (event.type) {
@@ -82,16 +99,35 @@ pub fn main() !void {
                     quit = true;
                 },
                 c.SDL_KEYDOWN => {
-                    player.position = player.position.add(Vector2.UNIT_X);
+                    // @TODO: can use SDL repeats in future (research required)
+                    if (event.key.repeat == 0) {
+                        try inputFrame.registerKeyDown(@enumFromInt(event.key.keysym.scancode));
+                    }
                 },
                 c.SDL_KEYUP => {
-                    player.position = player.position.add(Vector2.UNIT_Y);
+                    try inputFrame.registerKeyUp(@enumFromInt(event.key.keysym.scancode));
                 },
                 else => {},
             }
         }
 
-        player.update(dt);
+        try inputFrame.takeSnapshot();
+
+        const is: *const InputSnapshot = &inputFrame.snapshot;
+
+        if (is.isKeyDown(.d)) {
+            player.position = player.position.add(Vector2.UNIT_X.scale(20));
+        }
+
+        if (is.isKeyUp(.f)) {
+            player.position = player.position.add(Vector2.UNIT_X.scale(-20));
+        }
+
+        if (is.isKeyPressed(.w)) {
+            player.position = player.position.add(Vector2.UNIT_Y);
+        }
+
+        player.update(dt, is);
 
         _ = c.SDL_RenderClear(renderer);
         _ = c.SDL_RenderCopy(renderer, floorTexture, null, null);
