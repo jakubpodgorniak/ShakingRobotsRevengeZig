@@ -12,23 +12,41 @@ pub const Player = struct {
     facing: Vector2 = Vector2.UNIT_X,
     immortal: bool,
 
-    pub fn update(self: *Player, dt: f32, inputSnapshot: *const InputSnapshot) void {
-        _ = dt;
-        _ = self;
+    pub fn update(self: *Player, dt: f32, is: *const InputSnapshot) void {
         // movement
-        const move: Vector2 = Vector2.ZERO;
-        _ = move;
+        var move: Vector2 = Vector2.ZERO;
 
         var moved = false;
-        _ = moved;
 
-        var moveUp: bool = inputSnapshot.isKeyPressed(.up);
-        _ = moveUp; // get input info
-        var moveLeft: bool = inputSnapshot.isKeyPressed(.left);
-        var moveRight: bool = inputSnapshot.isKeyPressed(.right);
-        var moveDown: bool = inputSnapshot.isKeyPressed(.down);
-        _ = moveDown; // get input info
+        const moveUp: bool = is.isKeyPressed(.up);
+        const moveLeft: bool = is.isKeyPressed(.left);
+        const moveRight: bool = is.isKeyPressed(.right);
+        const moveDown: bool = is.isKeyPressed(.down);
 
-        if (moveLeft and !moveRight) {}
+        if (moveLeft and !moveRight) {
+            move = move.add(Vector2.UNIT_X.scale(-1));
+            moved = true;
+        }
+
+        if (moveRight and !moveLeft) {
+            move = move.add(Vector2.UNIT_X);
+            moved = true;
+        }
+
+        if (moveUp and !moveDown) {
+            move = move.add(Vector2.UNIT_Y.scale(-1));
+            moved = true;
+        }
+
+        if (moveDown and !moveUp) {
+            move = move.add(Vector2.UNIT_Y);
+            moved = true;
+        }
+
+        if (moved) {
+            move = move.normalize();
+
+            self.position = self.position.add(move.scale(dt * 2.0)); // 2,0 = movement speed
+        }
     }
 };

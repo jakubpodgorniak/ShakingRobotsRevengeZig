@@ -6,9 +6,11 @@ const std = @import("std");
 const assert = @import("std").debug.assert;
 const entities = @import("entities.zig");
 const Vector2 = @import("core.zig").Vector2;
+const PointI32 = @import("core.zig").PointI32;
 const InputFrame = @import("input.zig").InputFrame;
 const InputSnapshot = @import("input.zig").InputSnapshot;
 const Scancode = @import("input.zig").Scancode;
+const world = @import("world.zig");
 
 pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
@@ -115,30 +117,26 @@ pub fn main() !void {
 
         const is: *const InputSnapshot = &inputFrame.snapshot;
 
-        if (is.isKeyDown(.d)) {
-            player.position = player.position.add(Vector2.UNIT_X.scale(20));
-        }
-
-        if (is.isKeyUp(.f)) {
-            player.position = player.position.add(Vector2.UNIT_X.scale(-20));
-        }
-
-        if (is.isKeyPressed(.w)) {
-            player.position = player.position.add(Vector2.UNIT_Y);
-        }
-
         player.update(dt, is);
 
         _ = c.SDL_RenderClear(renderer);
         _ = c.SDL_RenderCopy(renderer, floorTexture, null, null);
 
-        const jasonDest: *const c.SDL_Rect = &.{
-            .x = @as(c_int, @intFromFloat(player.position.getX())),
-            .y = @as(c_int, @intFromFloat(player.position.getY())),
-            .w = 1280,
-            .h = 720,
+        const jasonSrc: *const c.SDL_Rect = &.{
+            .x = 256,
+            .y = 0,
+            .w = 128,
+            .h = 128,
         };
-        _ = c.SDL_RenderCopy(renderer, jasonTexture, null, jasonDest);
+
+        const jasonRenderPos: PointI32 = world.getScreenPosition(player.position);
+        const jasonDest: *const c.SDL_Rect = &.{
+            .x = @as(c_int, jasonRenderPos.x),
+            .y = @as(c_int, jasonRenderPos.y),
+            .w = 128,
+            .h = 128,
+        };
+        _ = c.SDL_RenderCopy(renderer, jasonTexture, jasonSrc, jasonDest);
         c.SDL_RenderPresent(renderer);
 
         c.SDL_Delay(17);
