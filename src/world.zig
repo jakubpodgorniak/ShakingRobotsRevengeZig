@@ -15,8 +15,15 @@ pub fn getScreenPosition(pos: Vector2) PointI32 {
     const x: f32 = math.floor(pos.getX() * PIXELS_PER_UNIT);
     const y: f32 = math.floor(pos.getY() * PIXELS_PER_UNIT);
 
-    return .{
-        .x = @intFromFloat(x),
-        .y = @intFromFloat(y),
-    };
+    return PointI32.new(
+        @intFromFloat(x),
+        @intFromFloat(y),
+    );
+}
+
+pub fn screen2World(point: PointI32) Vector2 {
+    return Vector2.new(
+        @as(f32, @floatFromInt(point.x)) / PIXELS_PER_UNIT_F32,
+        @as(f32, @floatFromInt(point.y)) / PIXELS_PER_UNIT_F32,
+    );
 }

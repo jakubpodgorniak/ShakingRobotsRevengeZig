@@ -1,5 +1,6 @@
 const Vector2 = @import("core.zig").Vector2;
 const InputSnapshot = @import("input.zig").InputSnapshot;
+const world = @import("world.zig");
 
 pub const WeaponType = enum(u8) {
     shotgun = 0,
@@ -48,5 +49,11 @@ pub const Player = struct {
 
             self.position = self.position.add(move.scale(dt * 2.0)); // 2,0 = movement speed
         }
+
+        // rotation
+        const mouseWorldPos: Vector2 = world.screen2World(is.mouse.pos);
+        const newFacing: Vector2 = mouseWorldPos.sub(self.position).normalize();
+
+        self.facing = Vector2.lerp(self.facing, newFacing, 10 * dt); // 10 is rotation speed
     }
 };

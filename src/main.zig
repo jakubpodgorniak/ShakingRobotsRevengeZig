@@ -5,8 +5,9 @@ const c = @cImport({
 const std = @import("std");
 const assert = @import("std").debug.assert;
 const entities = @import("entities.zig");
-const Vector2 = @import("core.zig").Vector2;
-const PointI32 = @import("core.zig").PointI32;
+const core = @import("core.zig");
+const Vector2 = core.Vector2;
+const PointI32 = core.PointI32;
 const InputFrame = @import("input.zig").InputFrame;
 const InputSnapshot = @import("input.zig").InputSnapshot;
 const Scancode = @import("input.zig").Scancode;
@@ -84,7 +85,13 @@ pub fn main() !void {
         if (deinit_status == .leak) unreachable;
     }
 
-    var _inputFrame = InputFrame.init(gpaAllocator);
+    var _mouseX: i32 = 0;
+    var _mouseY: i32 = 0;
+    const mouseX: *i32 = &_mouseX;
+    const mouseY: *i32 = &_mouseY;
+    _ = c.SDL_GetMouseState(mouseX, mouseY);
+
+    var _inputFrame = InputFrame.init(gpaAllocator, PointI32.new(_mouseX, _mouseY));
     var inputFrame: *InputFrame = &_inputFrame;
     defer inputFrame.deinit();
 
@@ -108,6 +115,9 @@ pub fn main() !void {
                 },
                 c.SDL_KEYUP => {
                     try inputFrame.registerKeyUp(@enumFromInt(event.key.keysym.scancode));
+                },
+                c.SDL_MOUSEMOTION => {
+                    inputFrame.registerMousePos(PointI32.new(event.motion.x, event.motion.y));
                 },
                 else => {},
             }
@@ -136,7 +146,19 @@ pub fn main() !void {
             .w = 128,
             .h = 128,
         };
-        _ = c.SDL_RenderCopy(renderer, jasonTexture, jasonSrc, jasonDest);
+        const jasonCenter: *const c.SDL_Point = &.{
+            .x = 64,
+            .y = 64,
+        };
+        _ = c.SDL_RenderCopyEx(
+            renderer,
+            jasonTexture,
+            jasonSrc,
+            jasonDest,
+            player.facing.angle() * core.RAD_2_DEG,
+            jasonCenter,
+            c.SDL_FLIP_NONE,
+        );
         c.SDL_RenderPresent(renderer);
 
         c.SDL_Delay(17);

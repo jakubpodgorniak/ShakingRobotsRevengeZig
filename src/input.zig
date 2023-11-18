@@ -3,6 +3,7 @@ const assert = std.debug.assert;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
+const PointI32 = @import("core.zig").PointI32;
 
 pub const Scancode = enum(u16) {
     unknown = 0,
@@ -248,16 +249,26 @@ pub const Scancode = enum(u16) {
     app2 = 284,
 };
 
+pub const InputSnapshotMouse = struct {
+    prevPos: PointI32,
+    pos: PointI32,
+};
+
 pub const InputSnapshot = struct {
     downKeys: ArrayList(Scancode),
     upKeys: ArrayList(Scancode),
     pressedKeys: ArrayList(Scancode),
+    mouse: InputSnapshotMouse,
 
     pub fn init(allocator: Allocator) InputSnapshot {
         return InputSnapshot{
             .downKeys = ArrayList(Scancode).init(allocator),
             .upKeys = ArrayList(Scancode).init(allocator),
             .pressedKeys = ArrayList(Scancode).init(allocator),
+            .mouse = InputSnapshotMouse{
+                .prevPos = PointI32.ZERO,
+                .pos = PointI32.ZERO,
+            },
         };
     }
 
@@ -271,6 +282,8 @@ pub const InputSnapshot = struct {
         self.downKeys.clearAndFree();
         self.upKeys.clearAndFree();
         self.pressedKeys.clearAndFree();
+        self.mouse.prevPos = PointI32.ZERO;
+        self.mouse.pos = PointI32.ZERO;
     }
 
     pub fn isKeyDown(self: *const InputSnapshot, code: Scancode) bool {
@@ -383,13 +396,17 @@ const InputFrameError = error{
 pub const InputFrame = struct {
     prevPressedKeys: ArrayList(Scancode),
     pressedKeys: ArrayList(Scancode),
+    prevMousePos: PointI32,
+    mousePos: PointI32,
     snapshot: InputSnapshot,
     state: InputFrameState,
 
-    pub fn init(allocator: Allocator) InputFrame {
+    pub fn init(allocator: Allocator, mousePos: PointI32) InputFrame {
         return InputFrame{
             .prevPressedKeys = ArrayList(Scancode).init(allocator),
             .pressedKeys = ArrayList(Scancode).init(allocator),
+            .prevMousePos = mousePos,
+            .mousePos = mousePos,
             .snapshot = InputSnapshot.init(allocator),
             .state = .new,
         };
@@ -405,8 +422,9 @@ pub const InputFrame = struct {
         if (self.state == .registration) return InputFrameError.RegistrationStartedTwice;
 
         self.prevPressedKeys.clearAndFree();
-
         try self.prevPressedKeys.appendSlice(self.pressedKeys.items);
+
+        self.prevMousePos = self.mousePos;
 
         self.state = .registration;
     }
@@ -429,6 +447,10 @@ pub const InputFrame = struct {
         assert(index != null);
 
         _ = self.pressedKeys.swapRemove(index.?);
+    }
+
+    pub fn registerMousePos(self: *InputFrame, pos: PointI32) void {
+        self.mousePos = pos;
     }
 
     pub fn takeSnapshot(self: *InputFrame) !void {
@@ -467,12 +489,15 @@ pub const InputFrame = struct {
             }
         }
 
+        self.snapshot.mouse.prevPos = self.prevMousePos;
+        self.snapshot.mouse.pos = self.mousePos;
+
         self.state = .registrationFinished;
     }
 };
 
 test "input.InputFrame.init" {
-    var frame = InputFrame.init(testing.allocator);
+    var frame = InputFrame.init(testing.allocator, PointI32.ZERO);
     defer frame.deinit();
 
     try testing.expect(frame.prevPressedKeys.allocator.ptr == testing.allocator.ptr);
@@ -482,7 +507,7 @@ test "input.InputFrame.init" {
 }
 
 test "input.InputFrame.deinit" {
-    var frame = InputFrame.init(testing.allocator);
+    var frame = InputFrame.init(testing.allocator, PointI32.ZERO);
     try frame.prevPressedKeys.append(.d1);
     try frame.pressedKeys.append(.d2);
     try frame.snapshot.downKeys.append(.d3);
@@ -491,7 +516,7 @@ test "input.InputFrame.deinit" {
 }
 
 test "input.InputFrame.beginNext twice" {
-    var frame = InputFrame.init(testing.allocator);
+    var frame = InputFrame.init(testing.allocator, PointI32.ZERO);
     defer frame.deinit();
 
     try frame.beginNext();
@@ -499,28 +524,51 @@ test "input.InputFrame.beginNext twice" {
 }
 
 test "input.InputFrame.registerKeyDown without beginNext" {
-    var frame = InputFrame.init(testing.allocator);
+    var frame = InputFrame.init(testing.allocator, PointI32.ZERO);
     defer frame.deinit();
 
     try testing.expectError(InputFrameError.NotInRegistration, frame.registerKeyDown(.d1));
 }
 
 test "input.InputFrame.registerKeyUp without beginNext" {
-    var frame = InputFrame.init(testing.allocator);
+    var frame = InputFrame.init(testing.allocator, PointI32.ZERO);
     defer frame.deinit();
 
     try testing.expectError(InputFrameError.NotInRegistration, frame.registerKeyUp(.d1));
 }
 
 test "input.InputFrame.takeSnapshot without beginNext" {
-    var frame = InputFrame.init(testing.allocator);
+    var frame = InputFrame.init(testing.allocator, PointI32.ZERO);
     defer frame.deinit();
 
     try testing.expectError(InputFrameError.NotInRegistration, frame.takeSnapshot());
 }
 
+test "input.InputFrame.registerMousePos" {
+    var frame = InputFrame.init(testing.allocator, PointI32.ZERO);
+    defer frame.deinit();
+
+    try frame.beginNext();
+    frame.registerMousePos(PointI32.new(1, 2));
+    try frame.takeSnapshot();
+
+    try testing.expect(frame.snapshot.mouse.prevPos.x == 0);
+    try testing.expect(frame.snapshot.mouse.prevPos.y == 0);
+    try testing.expect(frame.snapshot.mouse.pos.x == 1);
+    try testing.expect(frame.snapshot.mouse.pos.y == 2);
+
+    try frame.beginNext();
+    frame.registerMousePos(PointI32.new(1, 3));
+    try frame.takeSnapshot();
+
+    try testing.expect(frame.snapshot.mouse.prevPos.x == 1);
+    try testing.expect(frame.snapshot.mouse.prevPos.y == 2);
+    try testing.expect(frame.snapshot.mouse.pos.x == 1);
+    try testing.expect(frame.snapshot.mouse.pos.y == 3);
+}
+
 test "input.InputFrame" {
-    var frame = InputFrame.init(testing.allocator);
+    var frame = InputFrame.init(testing.allocator, PointI32.ZERO);
     defer frame.deinit();
 
     try frame.beginNext();
