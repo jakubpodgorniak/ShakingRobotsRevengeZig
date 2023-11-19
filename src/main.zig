@@ -93,16 +93,22 @@ pub fn main() !void {
     var inputFrame: *InputFrame = &_inputFrame;
     defer inputFrame.deinit();
 
-    const dt: f32 = 17.0 / 1000.0;
+    var totalTime: f32 = 0.0; // total time for simulation (works together with dt);
+    const dt: f32 = 1.0 / 60.0;
+    var frameTimeAcc: f32 = 0.0;
 
     var prevInstant = try Instant.now();
+
+    try inputFrame.beginNext();
 
     var quit = false;
     while (!quit) {
         var instant = try Instant.now();
-        const elapsedMs: f32 = @as(f32, @floatFromInt(instant.since(prevInstant))) * 0.000001;
+        const elapsedS: f32 = @as(f32, @floatFromInt(instant.since(prevInstant))) * 0.000000001;
+        // @NOTE: some limiting of elapsedMs maybe required in case of lag
+        prevInstant = instant;
 
-        try inputFrame.beginNext();
+        frameTimeAcc += elapsedS;
 
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
@@ -126,11 +132,18 @@ pub fn main() !void {
             }
         }
 
-        try inputFrame.takeSnapshot();
+        while (frameTimeAcc >= dt) {
+            try inputFrame.takeSnapshot();
 
-        const is: *const InputSnapshot = &inputFrame.snapshot;
+            const is: *const InputSnapshot = &inputFrame.snapshot;
 
-        player.update(dt, is);
+            player.update(dt, is);
+
+            totalTime += dt;
+            frameTimeAcc -= dt;
+
+            try inputFrame.beginNext();
+        }
 
         _ = c.SDL_RenderClear(renderer);
         _ = c.SDL_RenderCopy(renderer, floorTexture, null, null);
@@ -142,7 +155,10 @@ pub fn main() !void {
             .h = 128,
         };
 
-        const jasonRenderPos: PointI32 = world.getScreenPosition(player.transform.pos);
+        var alpha: f32 = frameTimeAcc / dt;
+
+        const jasonTransform: entities.Transform = entities.Transform.lerp(player.prevTransform, player.transform, alpha);
+        const jasonRenderPos: PointI32 = world.getScreenPosition(jasonTransform.pos);
         const jasonDest: *const c.SDL_Rect = &.{
             .x = @as(c_int, jasonRenderPos.x),
             .y = @as(c_int, jasonRenderPos.y),
@@ -158,14 +174,10 @@ pub fn main() !void {
             jasonTexture,
             jasonSrc,
             jasonDest,
-            player.transform.facing.angle() * core.RAD_2_DEG,
+            jasonTransform.facing.angle() * core.RAD_2_DEG,
             jasonCenter,
             c.SDL_FLIP_NONE,
         );
         c.SDL_RenderPresent(renderer);
-
-        c.SDL_Delay(17);
-
-        prevInstant = instant;
     }
 }

@@ -1,3 +1,4 @@
+const std = @import("std");
 const Vector2 = @import("core.zig").Vector2;
 const InputSnapshot = @import("input.zig").InputSnapshot;
 const world = @import("world.zig");
