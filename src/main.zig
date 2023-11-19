@@ -12,6 +12,7 @@ const InputFrame = @import("input.zig").InputFrame;
 const InputSnapshot = @import("input.zig").InputSnapshot;
 const Scancode = @import("input.zig").Scancode;
 const world = @import("world.zig");
+const Instant = std.time.Instant;
 
 pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
@@ -73,10 +74,7 @@ pub fn main() !void {
     defer c.SDL_DestroyTexture(jasonTexture);
     defer c.IMG_Quit();
 
-    var player = entities.Player{
-        .position = Vector2.new(5.0, 2.8125),
-        .immortal = false,
-    };
+    var player = entities.Player.init(Vector2.new(5.0, 2.8125));
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const gpaAllocator = gpa.allocator();
@@ -97,8 +95,13 @@ pub fn main() !void {
 
     const dt: f32 = 17.0 / 1000.0;
 
+    var prevInstant = try Instant.now();
+
     var quit = false;
     while (!quit) {
+        var instant = try Instant.now();
+        const elapsedMs: f32 = @as(f32, @floatFromInt(instant.since(prevInstant))) * 0.000001;
+
         try inputFrame.beginNext();
 
         var event: c.SDL_Event = undefined;
@@ -139,7 +142,7 @@ pub fn main() !void {
             .h = 128,
         };
 
-        const jasonRenderPos: PointI32 = world.getScreenPosition(player.position);
+        const jasonRenderPos: PointI32 = world.getScreenPosition(player.transform.pos);
         const jasonDest: *const c.SDL_Rect = &.{
             .x = @as(c_int, jasonRenderPos.x),
             .y = @as(c_int, jasonRenderPos.y),
@@ -155,12 +158,14 @@ pub fn main() !void {
             jasonTexture,
             jasonSrc,
             jasonDest,
-            player.facing.angle() * core.RAD_2_DEG,
+            player.transform.facing.angle() * core.RAD_2_DEG,
             jasonCenter,
             c.SDL_FLIP_NONE,
         );
         c.SDL_RenderPresent(renderer);
 
         c.SDL_Delay(17);
+
+        prevInstant = instant;
     }
 }
