@@ -3,6 +3,7 @@ const Vector2 = @import("core.zig").Vector2;
 const InputSnapshot = @import("input.zig").InputSnapshot;
 const world = @import("world.zig");
 const math = @import("std").math;
+const Allocator = std.mem.Allocator;
 
 pub const WeaponType = enum(u8) {
     shotgun = 0,
@@ -11,6 +12,8 @@ pub const WeaponType = enum(u8) {
 };
 
 pub const Transform = struct {
+    const ZERO = Transform.init(Vector2.ZERO, Vector2.ZERO);
+
     pos: Vector2,
     facing: Vector2,
 
@@ -119,6 +122,123 @@ pub const Player = struct {
 
         // @NOTE: This can fail if dt * speeds.rotationSpeed not in range <0, 1>
         self.transform.facing = Vector2.lerp(self.transform.facing, newFacing, dt * speeds.rotationSpeed);
+    }
+};
+
+const CircleCollider = struct {
+    radius: f32,
+    position: Vector2,
+};
+
+const PointCollider = struct {
+    position: Vector2,
+};
+
+const Tile = struct {
+    heat: f32,
+    guideDirection: Vector2,
+};
+
+const EnemyState = enum(u8) {
+    none,
+    inactive,
+    goesIn,
+    fightsJason,
+};
+
+const Enemy = struct {
+    index: usize,
+    state: EnemyState,
+    movementSpeed: f32,
+    rotationSpeed: f32,
+    prevTransform: Transform,
+    transform: Transform,
+    collider: CircleCollider,
+    health: f32,
+};
+
+const EnemySpawner = struct {
+    pos: Vector2,
+    direction: Vector2,
+};
+
+pub const EnemiesManager = struct {
+    const MAX_ENEMIES_COUNT: i32 = 300;
+    const RIGHT_UP_UNIT_VECTOR_2: Vector2 = Vector2.new(1.0, -1.0).normalize();
+    const RIGHT_DOWN_UNIT_VECTOR_2: Vector2 = Vector2.new(1.0, 1.0).normalize();
+    const LEFT_UP_UNIT_VECTOR_2: Vector2 = Vector2.new(-1.0, -1.0).normalize();
+    const LEFT_DOWN_UNIT_VECTOR_2: Vector2 = Vector2.new(-1.0, 1.0).normalize();
+
+    const IndexesQueue = std.TailQueue(usize);
+
+    enemies: [MAX_ENEMIES_COUNT]Enemy,
+    inactiveEnemiesIndexesQueueNodes: [MAX_ENEMIES_COUNT]IndexesQueue.Node,
+    inactiveEnemiesIndexes: IndexesQueue,
+    enemiesGoingIn: std.ArrayList(*Enemy),
+    fightingEnemies: std.ArrayList(*Enemy),
+
+    const spawners = [_]EnemySpawner{
+        EnemySpawner{ .pos = Vector2.new(2.3, 0.1), .direction = Vector2.new(0.0, 1.0) }, // up 1
+        EnemySpawner{ .pos = Vector2.new(7.2, 0.1), .direction = Vector2.new(0.0, 1.0) }, // up 2
+        EnemySpawner{ .pos = Vector2.new(9.5, 1.5), .direction = Vector2.new(-1.0, 0.0) }, // right 1
+        EnemySpawner{ .pos = Vector2.new(9.5, 4.0), .direction = Vector2.new(-1.0, 0.0) }, // right 2
+        EnemySpawner{ .pos = Vector2.new(7.2, 5.5), .direction = Vector2.new(0.0, -1.0) }, // down 1
+        EnemySpawner{ .pos = Vector2.new(4.9, 5.5), .direction = Vector2.new(0.0, -1.0) }, // down 2
+        EnemySpawner{ .pos = Vector2.new(2.3, 5.5), .direction = Vector2.new(0.0, -1.0) }, // down 3
+        EnemySpawner{ .pos = Vector2.new(0.1, 4.0), .direction = Vector2.new(1.0, 0.0) }, // left 1
+        EnemySpawner{ .pos = Vector2.new(0.1, 1.5), .direction = Vector2.new(1.0, 0.0) }, // left 2
+    };
+
+    pub fn init(allocator: Allocator) EnemiesManager {
+        return EnemiesManager{
+            .enemies = initEnemies: {
+                var initialEnemies: [EnemiesManager.MAX_ENEMIES_COUNT]Enemy = undefined;
+                for (&initialEnemies, 0..) |*enemy, i| {
+                    enemy.* = Enemy{
+                        .index = i,
+                        .state = .none,
+                        .movementSpeed = 0,
+                        .rotationSpeed = 0,
+                        .prevTransform = Transform.ZERO,
+                        .transform = Transform.ZERO,
+                        .collider = CircleCollider{ .radius = 0.25, .position = Vector2.ZERO },
+                        .health = 1.0,
+                    };
+                }
+                break :initEnemies initialEnemies;
+            },
+            .inactiveEnemiesIndexesQueueNodes = initInactiveEnemiesIndexesQueueNodes: {
+                var nodes: [EnemiesManager.MAX_ENEMIES_COUNT]IndexesQueue.Node = undefined;
+                for (&nodes, 0..) |*node, i| {
+                    node.* = IndexesQueue.Node{ .data = i };
+                }
+                break :initInactiveEnemiesIndexesQueueNodes nodes;
+            },
+            .inactiveEnemiesIndexes = IndexesQueue{},
+            .enemiesGoingIn = std.ArrayList(*Enemy).init(allocator),
+            .fightingEnemies = std.ArrayList(*Enemy).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *EnemiesManager) void {
+        self.enemiesGoingIn.deinit();
+        self.fightingEnemies.deinit();
+    }
+
+    pub fn reset(self: *EnemiesManager) void {
+        for (self.enemies) |enemy| {
+            _ = enemy;
+        }
+    }
+
+    fn inactivateEnemy(self: *EnemiesManager, enemy: *Enemy) void {
+        if (enemy.state == .inactive) {
+            return;
+        }
+
+        enemy.state = .inactive;
+
+        self.inactiveEnemiesIndexes.append(&std.TailQueue(usize).Node{ .data = enemy.index });
     }
 };
 

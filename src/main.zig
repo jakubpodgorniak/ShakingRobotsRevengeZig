@@ -57,6 +57,9 @@ pub fn main() !void {
         if (deinit_status == .leak) unreachable;
     }
 
+    var enemiesManager = entities.EnemiesManager.init(gpaAllocator);
+    defer enemiesManager.deinit();
+
     var _mouseX: i32 = 0;
     var _mouseY: i32 = 0;
     const mouseX: *i32 = &_mouseX;
@@ -74,6 +77,8 @@ pub fn main() !void {
     var prevInstant = try Instant.now();
 
     try inputFrame.beginNext();
+
+    enemiesManager.reset(); // @NOTE: temporary
 
     var quit = false;
     while (!quit) {
