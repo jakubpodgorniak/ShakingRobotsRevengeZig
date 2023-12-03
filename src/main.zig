@@ -13,6 +13,7 @@ const InputSnapshot = @import("input.zig").InputSnapshot;
 const Scancode = @import("input.zig").Scancode;
 const world = @import("world.zig");
 const Instant = std.time.Instant;
+const Rand = std.rand.DefaultPrng;
 
 pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
@@ -57,7 +58,10 @@ pub fn main() !void {
         if (deinit_status == .leak) unreachable;
     }
 
-    var enemiesManager = entities.EnemiesManager.init(gpaAllocator);
+    var nowTimestamp: u64 = (try Instant.now()).timestamp;
+    var rand = Rand.init(nowTimestamp);
+
+    var enemiesManager = entities.EnemiesManager.init(gpaAllocator, &rand);
     defer enemiesManager.deinit();
 
     var _mouseX: i32 = 0;

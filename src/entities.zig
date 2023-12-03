@@ -4,6 +4,7 @@ const InputSnapshot = @import("input.zig").InputSnapshot;
 const world = @import("world.zig");
 const math = @import("std").math;
 const Allocator = std.mem.Allocator;
+const Rand = std.rand.DefaultPrng;
 
 pub const WeaponType = enum(u8) {
     shotgun = 0,
@@ -123,6 +124,23 @@ pub const Player = struct {
         // @NOTE: This can fail if dt * speeds.rotationSpeed not in range <0, 1>
         self.transform.facing = Vector2.lerp(self.transform.facing, newFacing, dt * speeds.rotationSpeed);
     }
+
+    pub fn kill(self: *Player) void {
+        if (self.immortal) {
+            return;
+        }
+
+        self.isDead = true;
+    }
+
+    pub fn revive(self: *Player) void {
+        self.isDead = false;
+    }
+};
+
+pub const Tile = struct {
+    heat: f32,
+    guideDirection: Vector2,
 };
 
 const CircleCollider = struct {
@@ -132,11 +150,6 @@ const CircleCollider = struct {
 
 const PointCollider = struct {
     position: Vector2,
-};
-
-const Tile = struct {
-    heat: f32,
-    guideDirection: Vector2,
 };
 
 const EnemyState = enum(u8) {
@@ -171,11 +184,17 @@ pub const EnemiesManager = struct {
 
     const IndexesQueue = std.TailQueue(usize);
 
+    const TILE_MAP_WIDTH: i32 = 44;
+    const TILE_MAP_HEIGHT: i32 = 36;
+    const TILE_MAP_TILE_SIZE: f32 = 0.25;
+
     enemies: [MAX_ENEMIES_COUNT]Enemy,
     inactiveEnemiesIndexesQueueNodes: [MAX_ENEMIES_COUNT]IndexesQueue.Node,
     inactiveEnemiesIndexes: IndexesQueue,
     enemiesGoingIn: std.ArrayList(*Enemy),
     fightingEnemies: std.ArrayList(*Enemy),
+    rand: *Rand,
+    tileMap: [TILE_MAP_WIDTH][TILE_MAP_HEIGHT]Tile,
 
     const spawners = [_]EnemySpawner{
         EnemySpawner{ .pos = Vector2.new(2.3, 0.1), .direction = Vector2.new(0.0, 1.0) }, // up 1
@@ -189,7 +208,7 @@ pub const EnemiesManager = struct {
         EnemySpawner{ .pos = Vector2.new(0.1, 1.5), .direction = Vector2.new(1.0, 0.0) }, // left 2
     };
 
-    pub fn init(allocator: Allocator) EnemiesManager {
+    pub fn init(allocator: Allocator, rand: *Rand) EnemiesManager {
         return EnemiesManager{
             .enemies = initEnemies: {
                 var initialEnemies: [EnemiesManager.MAX_ENEMIES_COUNT]Enemy = undefined;
@@ -217,12 +236,27 @@ pub const EnemiesManager = struct {
             .inactiveEnemiesIndexes = IndexesQueue{},
             .enemiesGoingIn = std.ArrayList(*Enemy).init(allocator),
             .fightingEnemies = std.ArrayList(*Enemy).init(allocator),
+            .rand = rand,
+            .tileMap = initTileMap: {
+                var initialTileMap: [TILE_MAP_WIDTH][TILE_MAP_HEIGHT]Tile = undefined;
+                for (initialTileMap, 0..) |_, i| {
+                    for (initialTileMap[i], 0..) |_, j| {
+                        initialTileMap[i][j] = Tile{ .heat = 0.0, .guideDirection = Vector2.ZERO };
+                    }
+                }
+
+                break :initTileMap initialTileMap;
+            },
         };
     }
 
     pub fn deinit(self: *EnemiesManager) void {
         self.enemiesGoingIn.deinit();
         self.fightingEnemies.deinit();
+    }
+
+    pub fn getEnemiesLeftToSpawnNumber(self: *EnemiesManager) usize {
+        return self.inactiveEnemiesIndexes.len;
     }
 
     pub fn reset(self: *EnemiesManager) void {
@@ -237,8 +271,39 @@ pub const EnemiesManager = struct {
         }
 
         enemy.state = .inactive;
+        self.inactiveEnemiesIndexes.append(&IndexesQueue.Node{ .data = enemy.index });
+    }
 
-        self.inactiveEnemiesIndexes.append(&std.TailQueue(usize).Node{ .data = enemy.index });
+    pub fn spawnRandomEnemy(self: *EnemiesManager) void {
+        if (self.inactiveEnemiesIndexes.len == 0) {
+            return;
+        }
+
+        var spawner: EnemySpawner = self.spawners[@as(usize, self.rand.random().next() % self.spawners.len)];
+        var enemyIndex: usize = self.inactiveEnemiesIndexes.pop().data;
+        var enemy: Enemy = self.enemies[enemyIndex];
+
+        const LEVEL_RATIO: f32 = 0.05;
+        const MAX_LEVEL_RATIO: f32 = 0.5;
+
+        // @TODO: GAME TEN SECONDS LEVEL
+        const GAME_TEN_SECONDS_LEVEL: i32 = 2;
+        var additionalSpeedByLevel: f32 = math.floatMin(GAME_TEN_SECONDS_LEVEL * LEVEL_RATIO, MAX_LEVEL_RATIO);
+
+        enemy.position = spawner.pos;
+        enemy.facing = spawner.direction;
+        enemy.movementSpeed = 0.3 + (0.8 * self.rand.random().float(f32)) + additionalSpeedByLevel;
+        enemy.rotationSpeed = 3.0;
+        enemy.state = .goesIn;
+        enemy.collider = CircleCollider{
+            .position = enemy.position,
+            .radius = 0.25,
+        };
+    }
+
+    fn getTilePosition(position: Vector2) struct { tileX: i32, tileY: i32 } {
+        _ = position;
+        //tileMap = @as(i32, math.floor(position.x / TILE_MAP_TILE_SIZE));
     }
 };
 
